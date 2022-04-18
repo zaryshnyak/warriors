@@ -1,7 +1,7 @@
 from rest_framework import serializers, generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
+from rest_framework.generics import GenericAPIView
 from .models import *
 
 
@@ -11,10 +11,63 @@ class WarriorSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class SkillRelatedSerializer(serializers.ModelSerializer):
+    warrior_skils = WarriorSerializer(many=True)
+
+    class Meta:
+        model = Skill
+        fields = ["title", "warrior_skils"]
+
+
+class WarriorRelatedSerializer(serializers.ModelSerializer):
+    skill = serializers.SlugRelatedField(read_only=True, many=True, slug_field='title')
+
+    # skill = serializers.StringRelatedField(read_only=True, many=True)
+
+    class Meta:
+        model = Warrior
+        fields = "__all__"
+
+
+class WarriorDepthSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Warrior
+        fields = "__all__"
+
+        # добавляем глубину
+        depth = 1
+
+
+class SkillSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Skill
+        fields = "__all__"
+
+
+class ProfessionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Profession
+        fields = "__all__"
+
+
+class WarriorNestedSerializer(serializers.ModelSerializer):
+    # делаем наследование
+    profession = ProfessionSerializer()
+    skill = SkillSerializer(many=True)
+
+    # уточняем поле
+    race = serializers.CharField(source="get_race_display", read_only=True)
+
+    class Meta:
+        model = Warrior
+        fields = "__all__"
+
+
 class WarriorAPIView(APIView):
     def get(self, request):
         warriors = Warrior.objects.all()
-        serializer = WarriorSerializer(warriors, many=True)
+        serializer = WarriorNestedSerializer(warriors, many=True)
+        # serializer = WarriorSerializer(warriors, many=True)
         return Response({"Warriors": serializer.data})
 
 
@@ -42,12 +95,6 @@ class SkillAPIView(APIView):
         return Response({"Skills": serializer.data})
 
 
-class SkillSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Skill
-        fields = "__all__"
-
-
 class SkillCreateView(APIView):
     def post(self, request):
         skill = request.data.get("skill")
@@ -60,10 +107,10 @@ class SkillCreateView(APIView):
 
 
 class SkillWarriorCreateSerializer(serializers.ModelSerializer):
-     class Meta:
-         model = SkillOfWarrior
-         fields="__all__"
-    
+    class Meta:
+        model = SkillOfWarrior
+        fields = "__all__"
+
 
 class WarriorCreateSerializer(serializers.ModelSerializer):
     race = serializers.CharField(max_length=1)
@@ -72,11 +119,9 @@ class WarriorCreateSerializer(serializers.ModelSerializer):
     profession = serializers.PrimaryKeyRelatedField(queryset=Profession.objects.all())
     skill = SkillSerializer(many=True, read_only=True, source='skill.title')
 
-
     class Meta:
         model = Warrior
         fields = "__all__"
-
 
     # def create(self, validated_data):
     #     print(validated_data)
@@ -84,9 +129,6 @@ class WarriorCreateSerializer(serializers.ModelSerializer):
     #     warrior.save()
     #
     #     return Warrior(**validated_data)
-
-
-
 
 
 # class WarriorCreateSerializer(serializers.ModelSerializer):
@@ -108,3 +150,47 @@ class WarriorCreateView(generics.CreateAPIView):
 
     # def perform_create(self, serializer):
     #     serializer.save(owner=self.request.user)
+
+
+class WarriorProfessionAPIView(APIView):
+    def get(self, request):
+        warriors = Warrior.objects.all()
+        profession = Profession.objects.all()
+        warrior_serializer = WarriorSerializer(warriors, many=True)
+        profession_serializer = ProfessionSerializer(profession, many=True)
+        return Response({"Warriors": warrior_serializer.data, "Professions": profession_serializer.data})
+
+
+class WarriorSkillAPIView(APIView):
+    def get(self, request):
+        warriors = Warrior.objects.all()
+        skill = Skill.objects.all()
+        warrior_serializer = WarriorSerializer(warriors, many=True)
+        skill_serializer = SkillSerializer(skill, many=True)
+        return Response({"Warriors": warrior_serializer.data, "Skills": skill_serializer.data})
+
+
+class SingleWarriorSerializer(serializers.ModelSerializer):
+    profession = ProfessionSerializer()
+    skill = SkillSerializer(many=True)
+
+    class Meta:
+        model = Warrior
+        fields = "__all__"
+        read_only_fields = ['id']
+
+
+class SingleWarriorView(generics.RetrieveAPIView):
+    serializer_class = SingleWarriorSerializer
+    queryset = Warrior.objects.all()
+
+
+class WarriorUpdateView(generics.UpdateAPIView):
+    queryset = Warrior.objects.all()
+    serializer = WarriorSerializer
+    lookup_field = 'pk'
+
+
+class WarriorDestroyView(generics.DestroyAPIView):
+    queryset = Warrior.objects.all()
+    serializer = WarriorSerializer
